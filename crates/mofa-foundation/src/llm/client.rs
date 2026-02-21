@@ -463,7 +463,7 @@ pub struct ChatSession {
     /// 工具执行器
     tool_executor: Option<Arc<dyn ToolExecutor>>,
     /// 会话创建时间
-    created_at: std::time::Instant,
+    created_at: chrono::DateTime<chrono::Utc>,
     /// 会话元数据
     metadata: std::collections::HashMap<String, String>,
     /// 消息存储
@@ -528,7 +528,7 @@ impl ChatSession {
             system_prompt: None,
             tools: Vec::new(),
             tool_executor: None,
-            created_at: std::time::Instant::now(),
+            created_at: chrono::Utc::now(),
             metadata: std::collections::HashMap::new(),
             message_store: store.clone(),
             session_store: store.clone(),
@@ -565,7 +565,7 @@ impl ChatSession {
             system_prompt: None,
             tools: Vec::new(),
             tool_executor: None,
-            created_at: std::time::Instant::now(),
+            created_at: chrono::Utc::now(),
             metadata: std::collections::HashMap::new(),
             message_store,
             session_store,
@@ -639,8 +639,8 @@ impl ChatSession {
     }
 
     /// 获取会话创建时间
-    pub fn created_at(&self) -> std::time::Instant {
-        self.created_at
+    pub fn created_at(&self) -> std::time::SystemTime {
+        self.created_at.into()
     }
 
     /// 从数据库加载会话
@@ -740,8 +740,12 @@ impl ChatSession {
             system_prompt: None, // System prompt is not stored in messages
             tools: Vec::new(),   // Tools are not persisted yet
             tool_executor: None, // Tool executor is not persisted
-            created_at: std::time::Instant::now(), // TODO: Convert from db_session.create_time
-            metadata: std::collections::HashMap::new(), // TODO: Convert from db_session.metadata
+            created_at: _db_session.create_time, // Restored properly from DB
+            metadata: _db_session
+                .metadata
+                .into_iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k, s.to_string())))
+                .collect(), // Flattened correctly from Value->String
             message_store,
             session_store,
             context_window_size,
@@ -751,7 +755,10 @@ impl ChatSession {
 
     /// 获取会话存活时长
     pub fn elapsed(&self) -> std::time::Duration {
-        self.created_at.elapsed()
+        let now = chrono::Utc::now();
+        (now - self.created_at)
+            .to_std()
+            .unwrap_or(std::time::Duration::from_secs(0))
     }
 
     /// 设置元数据
